@@ -23,29 +23,33 @@ export const StockProvider = ({ children }) => {
 
             if (data['Note']) {
                 console.warn('AlphaVantage Rate Limit reached:', data['Note']);
-                setError('Rate limit reached. Please wait a minute.');
-                return null;
+                return { error: 'rate-limit', message: 'Rate limit reached. Please wait a minute.' };
             }
 
             if (data['Error Message']) {
-                console.error('AlphaVantage API Error:', data['Error Message']);
-                return null;
+                console.error('AlphaVantage API Error (Invalid Symbol):', data['Error Message']);
+                return { error: 'invalid-symbol', message: 'Invalid stock symbol.' };
             }
 
             if (data['Information']) {
                 console.info('AlphaVantage Information:', data['Information']);
-                return null;
+                return { error: 'info', message: data['Information'] };
             }
 
             if (data['Global Quote'] && data['Global Quote']['05. price']) {
-                return parseFloat(data['Global Quote']['05. price']);
+                return { price: parseFloat(data['Global Quote']['05. price']) };
+            }
+
+            // If Global Quote exists but is empty, it's likely an invalid symbol
+            if (data['Global Quote'] && Object.keys(data['Global Quote']).length === 0) {
+                return { error: 'invalid-symbol', message: 'Symbol not found.' };
             }
 
             console.warn(`No price data found for ${symbol}`);
-            return null;
+            return { error: 'unknown', message: 'Could not retrieve price data.' };
         } catch (err) {
             console.error(`Network or Parsing error fetching price for ${symbol}:`, err);
-            return null;
+            return { error: 'network', message: 'Network error.' };
         }
     }, [API_KEY, BASE_URL]);
 
@@ -54,38 +58,50 @@ export const StockProvider = ({ children }) => {
         setError(null);
 
         try {
-            // Verify if stock is valid by trying to fetch its price
-            const currentPrice = await fetchCurrentPrice(newStock.symbol);
+            const result = await fetchCurrentPrice(newStock.symbol);
 
-            if (currentPrice !== null) {
+            if (result.price !== undefined) {
                 const stockWithPrice = {
                     ...newStock,
-                    currentPrice: currentPrice,
+                    currentPrice: result.price,
                     lastUpdated: new Date().toISOString()
                 };
                 setStocks(prev => [...prev, stockWithPrice]);
                 setLoading(false);
                 return true;
-            } else {
-                // FALLBACK: If API is blocked (25 req/day limit), allow adding anyway for testing
-                console.info('API unavailable or limit reached. Falling back to Demo Mode for:', newStock.symbol);
+            } else if (result.error === 'rate-limit' || result.error === 'network' || result.error === 'unknown') {
+                // If it's a transient error, we could either block or add in demo mode
+                // The requirement says "invalid stock symbol should just be ignored"
+                // It doesn't explicitly say what to do with rate limits. 
+                // But usually, we want to allow the user to continue if it's a known valid symbol?
+                // Actually, let's keep the fallback for rate-limit but BE CLEAR about it.
+
+                console.info('API unavailable (rate limit/network). Adding in Demo Mode for:', newStock.symbol);
 
                 const stockWithPrice = {
                     ...newStock,
-                    currentPrice: newStock.price, // Use purchase price as current price for demo
-                    lastUpdated: new Date().toISOString(),
+                    currentPrice: null, // Don't set current price if we couldn't fetch it
+                    lastUpdated: null,
                     isDemoData: true
                 };
 
                 setStocks(prev => [...prev, stockWithPrice]);
                 setLoading(false);
-                // Still show a non-intrusive warning
-                setError('API limit reached. Added stock in "Demo Mode" using purchase price.');
+                setError(`API limit reached. Added ${newStock.symbol} but current price is unavailable.`);
                 return true;
+            } else if (result.error === 'invalid-symbol') {
+                // IGNORE invalid symbols as per requirement 1
+                console.warn('Ignoring invalid symbol:', newStock.symbol);
+                setError(`Invalid stock symbol: ${newStock.symbol}. It will be ignored.`);
+                setLoading(false);
+                return false;
             }
+
+            setLoading(false);
+            return false;
         } catch (err) {
             console.error('Error in validateAndAddStock:', err);
-            setError('Failed to add stock. Please check your connection and try again.');
+            setError('Failed to add stock. Please check your connection.');
             setLoading(false);
             return false;
         }
@@ -95,9 +111,9 @@ export const StockProvider = ({ children }) => {
         if (stocks.length === 0) return;
 
         const updatedStocks = await Promise.all(stocks.map(async (stock) => {
-            const price = await fetchCurrentPrice(stock.symbol);
-            if (price !== null) {
-                return { ...stock, currentPrice: price, lastUpdated: new Date().toISOString() };
+            const result = await fetchCurrentPrice(stock.symbol);
+            if (result.price !== undefined) {
+                return { ...stock, currentPrice: result.price, lastUpdated: new Date().toISOString(), isDemoData: false };
             }
             return stock;
         }));
@@ -105,22 +121,41 @@ export const StockProvider = ({ children }) => {
         setStocks(updatedStocks);
     }, [stocks, fetchCurrentPrice]);
 
-    // Update prices when component mounts and on interval (optional, but requested for list update)
+    const [autoRefresh, setAutoRefresh] = useState(false); // Default to off to save API calls
+
+    const toggleAutoRefresh = () => {
+        setAutoRefresh(prev => !prev);
+    };
+
+    // Update prices when component mounts and on interval if enabled
     useEffect(() => {
+        if (!autoRefresh) return;
+
+        console.log('Auto-refresh enabled: starting 5-minute interval');
         const interval = setInterval(() => {
             updateAllPrices();
-        }, 300000); // Update every 5 minutes to stay within free tier limits (5 calls/min)
+        }, 300000); // 5 minutes
 
-        return () => clearInterval(interval);
-    }, [updateAllPrices]);
+        return () => {
+            console.log('Auto-refresh disabled or clearing interval');
+            clearInterval(interval);
+        };
+    }, [updateAllPrices, autoRefresh]);
+
+    const removeStock = (id) => {
+        setStocks(prev => prev.filter(stock => stock.id !== id));
+    };
 
     return (
         <StockContext.Provider value={{
             stocks,
             addStock: validateAndAddStock,
+            removeStock,
             loading,
             error,
-            updateAllPrices
+            updateAllPrices,
+            autoRefresh,
+            toggleAutoRefresh
         }}>
             {children}
         </StockContext.Provider>
