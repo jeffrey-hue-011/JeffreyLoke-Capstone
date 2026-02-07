@@ -60,53 +60,53 @@ export const StockProvider = ({ children }) => {
         setLoading(true);
         setError(null);
 
+        // Always provide a unique ID if not present
+        const stockToAdd = {
+            ...newStock,
+            id: newStock.id || Date.now(),
+            currentPrice: null,
+            lastUpdated: null,
+            isDemoData: false
+        };
+
         try {
             const result = await fetchCurrentPrice(newStock.symbol);
 
             if (result.price !== undefined) {
+                // Success case
                 const stockWithPrice = {
-                    ...newStock,
+                    ...stockToAdd,
                     currentPrice: result.price,
                     lastUpdated: new Date().toISOString()
                 };
                 setStocks(prev => [...prev, stockWithPrice]);
                 setLoading(false);
                 return true;
-            } else if (result.error === 'rate-limit' || result.error === 'network' || result.error === 'unknown') {
-                // If it's a transient error, we could either block or add in demo mode
-                // The requirement says "invalid stock symbol should just be ignored"
-                // It doesn't explicitly say what to do with rate limits. 
-                // But usually, we want to allow the user to continue if it's a known valid symbol?
-                // Actually, let's keep the fallback for rate-limit but BE CLEAR about it.
-
-                console.info('API unavailable (rate limit/network). Adding in Demo Mode for:', newStock.symbol);
-
-                const stockWithPrice = {
-                    ...newStock,
-                    currentPrice: null, // Don't set current price if we couldn't fetch it
-                    lastUpdated: null,
-                    isDemoData: true
-                };
-
-                setStocks(prev => [...prev, stockWithPrice]);
+            } else if (result.error === 'rate-limit') {
+                // Rate limit case - still add but show warning
+                setError(`API limit reached. ${newStock.symbol} added, but price will update later.`);
+                setStocks(prev => [...prev, stockToAdd]);
                 setLoading(false);
-                setError(`API limit reached. Added ${newStock.symbol} but current price is unavailable.`);
                 return true;
             } else if (result.error === 'invalid-symbol') {
-                // IGNORE invalid symbols as per requirement 1
-                console.warn('Ignoring invalid symbol:', newStock.symbol);
-                setError(`Invalid stock symbol: ${newStock.symbol}. It will be ignored.`);
+                // Only case where we actually block the add
+                setError(`Symbol "${newStock.symbol}" not found. Please check and try again.`);
                 setLoading(false);
                 return false;
+            } else {
+                // Any other error (network, etc) - add it anyway so user sees progress
+                console.warn('API error during add, using fallback:', result.message);
+                setError(`Added ${newStock.symbol}, but couldn't get current price right now.`);
+                setStocks(prev => [...prev, stockToAdd]);
+                setLoading(false);
+                return true;
             }
-
-            setLoading(false);
-            return false;
         } catch (err) {
             console.error('Error in validateAndAddStock:', err);
-            setError('Failed to add stock. Please check your connection.');
+            setError('Connection issue. Stock added to dashboard but price is pending.');
+            setStocks(prev => [...prev, stockToAdd]);
             setLoading(false);
-            return false;
+            return true;
         }
     };
 
