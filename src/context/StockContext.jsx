@@ -3,7 +3,10 @@ import React, { createContext, useState, useContext, useCallback, useEffect } fr
 const StockContext = createContext();
 
 export const StockProvider = ({ children }) => {
-    const [stocks, setStocks] = useState([]);
+    const [stocks, setStocks] = useState(() => {
+        const savedStocks = localStorage.getItem('portfolio_stocks');
+        return savedStocks ? JSON.parse(savedStocks) : [];
+    });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -145,6 +148,11 @@ export const StockProvider = ({ children }) => {
     const removeStock = (id) => {
         setStocks(prev => prev.filter(stock => stock.id !== id));
     };
+
+    // Keep localStorage in sync with state
+    useEffect(() => {
+        localStorage.setItem('portfolio_stocks', JSON.stringify(stocks));
+    }, [stocks]);
 
     return (
         <StockContext.Provider value={{
