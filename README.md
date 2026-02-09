@@ -62,9 +62,25 @@ A premium React-based dashboard for tracking stock investments with real-time pr
    ```
 
 ## 🧠 Challenges & Solutions
-- **Strict API Rate Limits**: Solved by implementing a 5-minute refresh interval and a **User Control Toggle**, ensuring users don't burn through their daily 25-request limit unintentionally.
-- **Invalid Symbol Handling**: Implemented a "Pre-add Validation" check that attempts a small API call to verify a symbol's existence before adding it to the UI.
-- **Data Consistency**: Used memoized callbacks to ensure that manual refreshes and automatic timers don't conflict or cause race conditions.
+During the development of this capstone, several technical hurdles were encountered and resolved:
+
+- **API Rate Limits (AlphaVantage)**: The AlphaVantage free tier permits only 25 requests per day (and 5 per minute). 
+  - **Solution**: Implemented an **Auto-Refresh Toggle** (defaulted to off) and a **5-minute interval** to prevent exhausting credits. I also added a manual "Refresh Now" button so users only fetch data when specifically needed.
+- **Invalid Symbol Handling**: Baseline requirements often assume valid input, but real-world users enter typos or non-existent tickers.
+  - **Solution**: Created a "Pre-add Validation" step in the `StockContext`. Before a stock is committed to the portfolio, the app performs a lightweight API call to verify the symbol. If invalid, the user receives an immediate error message.
+- **Data Persistence**: A common issue with basic React apps is losing state on page refresh.
+  - **Solution**: Integrated `localStorage` synchronization within a `useEffect` hook, ensuring the user's portfolio remains intact even after closing the browser.
+- **Race Conditions & API Delay**: Rapidly adding stocks could cause state updates to overlap or API calls to hang.
+  - **Solution**: Used the `useCallback` hook to memoize fetch functions and managed a global `loading` state to disable inputs during active network requests.
+
+## 🚀 Improvements Beyond Baseline
+This version of the Stock Tracker goes significantly beyond the core requirements:
+
+- **Total Unrealized P&L Dashboard**: Added a global header widget that aggregates the cost basis vs. current value for every holding, providing a "big picture" view of portfolio performance.
+- **Premium Glassmorphism UI**: Eschewed basic styling for a state-of-the-art dark mode design. Utilized CSS backdrops, gradients, and custom animations to create a high-end, responsive professional feel.
+- **Advanced State Management**: Implemented a robust `StockContext` that handles not just the list of stocks, but also global error states, loading transitions, and sync preferences.
+- **Dynamic Profit/Loss Indicators**: Built a logic-driven styling system where gains and losses aren't just colored text, but dynamic elements that update visually based on real-time price delta.
+- **Portfolio Health Feedback**: Instead of simple error alerts, the UI provides nuanced feedback (e.g., "Rate limit reached - adding with pending price") to keep the user informed without breaking the flow.
 
 ---
 *Built for the Finance & React Capstone Project.*
