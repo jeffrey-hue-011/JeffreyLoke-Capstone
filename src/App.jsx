@@ -1,6 +1,7 @@
 import { useStocks } from './context/StockContext';
 import StockForm from './components/StockForm';
 import StockList from './components/StockList';
+import PortfolioWidget from './components/PortfolioWidget';
 import './App.css';
 
 function App() {
@@ -19,6 +20,9 @@ function App() {
 
   const isPLPositive = totalUnrealizedPL >= 0;
 
+  const formattedTotalValue = `$${totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const formattedPL = `${isPLPositive ? '+' : ''}$${Math.abs(totalUnrealizedPL).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
   return (
     <div className="dashboard-layout">
       <header className="dashboard-header animate-fade-in">
@@ -28,26 +32,25 @@ function App() {
             <p className="tagline">Real-time Portfolio Intelligence</p>
           </div>
           <div className="header-widgets">
-            <div className="portfolio-summary glass-card">
-              <span className="summary-label">Total Value</span>
-              <span className="summary-value">${totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            </div>
-            <div className="portfolio-summary glass-card">
-              <span className="summary-label">Total P&L</span>
-              <span className={`summary-value ${isPLPositive ? 'positive' : 'negative'}`}>
-                {isPLPositive ? '+' : ''}${Math.abs(totalUnrealizedPL).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </span>
-            </div>
+            {/* Component Composition: PortfolioWidget receives data via props */}
+            <PortfolioWidget label="Total Value" value={formattedTotalValue} />
+            <PortfolioWidget
+              label="Total P&L"
+              value={formattedPL}
+              valueClassName={isPLPositive ? 'positive' : 'negative'}
+            />
           </div>
         </div>
       </header>
 
       <main className="dashboard-main">
         <section className="form-section">
+          {/* No props: StockForm gets all data from Context */}
           <StockForm />
         </section>
 
         <section className="list-section">
+          {/* No props: StockList gets all data from Context */}
           <StockList />
         </section>
       </main>
@@ -60,4 +63,3 @@ function App() {
 }
 
 export default App;
-
